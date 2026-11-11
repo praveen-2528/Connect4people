@@ -48,9 +48,22 @@ const seedInitialConfig = async () => {
 /**
  * Initialize and start the application server
  */
-const startServer = async () => {
+const startServer = () => {
+  // Start HTTP server immediately on 0.0.0.0 so Render deploy health check passes instantly
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`===============================================`);
+    console.log(`🚀 Connect4People API Server running on port ${PORT}`);
+    console.log(`🌐 Health check: http://0.0.0.0:${PORT}/health`);
+    console.log(`⚙️  Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`===============================================`);
+
+    // Connect to database and seed defaults in the background
+    initDatabase();
+  });
+};
+
+const initDatabase = async () => {
   try {
-    // Authenticate database connection
     console.log('[Database] Connecting to PostgreSQL...');
     await sequelize.authenticate();
     console.log('[Database] PostgreSQL connected successfully.');
@@ -64,23 +77,8 @@ const startServer = async () => {
 
     // Seed default configurations
     await seedInitialConfig();
-
-    // Start listening
-    server.listen(PORT, () => {
-      console.log(`===============================================`);
-      console.log(`🚀 Connect4People API Server running on port ${PORT}`);
-      console.log(`🌐 Health check: http://localhost:${PORT}/health`);
-      console.log(`⚙️  Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log(`===============================================`);
-    });
   } catch (error) {
-    console.error('[Server] Failed to connect to database on startup:', error.message);
-    console.log('[Server] Starting HTTP server anyway so endpoints and health check respond...');
-    
-    // Allow server to still boot even if DB is pending configuration
-    server.listen(PORT, () => {
-      console.log(`🚀 Connect4People API Server running on port ${PORT} (Database offline or pending config)`);
-    });
+    console.warn('[Database] Initial connection or seed pending:', error.message);
   }
 };
 

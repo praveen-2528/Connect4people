@@ -44,7 +44,16 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Serve Admin Portal web app
 app.use('/admin', express.static(path.join(__dirname, '../public/admin')));
 
-// Health check endpoint
+// Root and Health check endpoints
+app.get('/', (req, res) => {
+  res.status(200).json({
+    name: 'Connect4People API',
+    status: 'healthy',
+    adminPortal: '/admin',
+    health: '/health'
+  });
+});
+
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
