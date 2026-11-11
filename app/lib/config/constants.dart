@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 
 class AppConstants {
-  // Replace with your EC2 public IP or domain when deployed (e.g. 'http://ec2-xx-xx-xx.compute-1.amazonaws.com:5000')
-  // For Android emulator testing use 'http://10.0.2.2:5000' or local LAN IP
-  static const String baseUrl = 'http://10.0.2.2:5000';
-  static const String socketUrl = 'http://10.0.2.2:5000';
+  // Live Render production backend connected to Neon PostgreSQL
+  static const String baseUrl = 'https://connect4people-api-83uq.onrender.com';
+  static const String socketUrl = 'https://connect4people-api-83uq.onrender.com';
 
   static const String tokenKey = 'c4p_auth_token';
   static const String userKey = 'c4p_user_data';

@@ -10,5 +10,6 @@ void main() {
       ),
     );
     expect(find.byType(Connect4PeopleApp), findsOneWidget);
+    await tester.pumpAndSettle(const Duration(seconds: 3));
   });
 }

@@ -41,7 +41,7 @@ class ApiService {
 
       final response = await http
           .get(uri, headers: _headers(withAuth))
-          .timeout(const Duration(seconds: 4));
+          .timeout(const Duration(seconds: 15));
       final decoded = jsonDecode(response.body);
 
       return ApiResponse(
@@ -64,7 +64,7 @@ class ApiService {
             headers: _headers(withAuth),
             body: body != null ? jsonEncode(body) : null,
           )
-          .timeout(const Duration(seconds: 4));
+          .timeout(const Duration(seconds: 15));
       final decoded = jsonDecode(response.body);
 
       return ApiResponse(
@@ -87,7 +87,7 @@ class ApiService {
             headers: _headers(withAuth),
             body: body != null ? jsonEncode(body) : null,
           )
-          .timeout(const Duration(seconds: 4));
+          .timeout(const Duration(seconds: 15));
       final decoded = jsonDecode(response.body);
 
       return ApiResponse(
