@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: connect4people-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 5000
+      - key: DB_SSL
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: PLATFORM_COMMISSION_PERCENT
+        value: "20"
+      - key: REGISTRATION_FEE_INR
+        value: "299"
+      - key: UPI_ID
+        value: "connect4people@upi"

@@ -1,4 +1,11 @@
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+
+// Load .env.local first if it exists (written by neon deploy / neon env pull), then fallback to .env
+if (fs.existsSync(path.resolve(process.cwd(), '.env.local'))) {
+  dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+}
 dotenv.config();
 
 import { Sequelize } from 'sequelize';

@@ -19,6 +19,12 @@ app/android/captures/
 
 # Environment and sensitive keys
 .env
+.env.local
+.env.*.local
+backend/.env.local
+backend/.env.*.local
+.neon
+backend/.neon
 *.pem
 *.key
 *.cert

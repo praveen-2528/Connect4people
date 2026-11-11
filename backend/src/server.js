@@ -1,5 +1,12 @@
 import http from 'http';
 import dotenv from 'dotenv';
+import fs from 'fs';
+import path from 'path';
+
+// Load .env.local first if it exists, then fallback to .env
+if (fs.existsSync(path.resolve(process.cwd(), '.env.local'))) {
+  dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
+}
 dotenv.config();
 
 import app from './app.js';
