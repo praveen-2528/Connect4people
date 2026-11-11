@@ -1,55 +1,65 @@
 import { Router } from 'express';
 import {
-  getPendingPayments, verifyPayment, rejectPayment,
-  getConfig, updateConfig, listUsers, getStats
+  adminLogin,
+  getPendingPayments,
+  listAllPayments,
+  verifyPayment,
+  rejectPayment,
+  getConfig,
+  updateConfig,
+  listUsers,
+  createUser,
+  updateUser,
+  deleteUser,
+  listAllBookings,
+  updateBookingStatus,
+  listAllConversations,
+  getConversationMessages,
+  deleteMessage,
+  listReports,
+  updateReport,
+  getStats
 } from '../controllers/adminController.js';
 import { authenticate, isAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
-// All admin routes require authentication + admin role
+// Public Admin Login Route
+router.post('/login', adminLogin);
+
+// Protected routes below require Authentication + Admin role
 router.use(authenticate, isAdmin);
 
-/**
- * @route GET /api/admin/payments/pending
- * @desc List pending payment claims
- */
+// Dashboard Overview Statistics
+router.get('/stats', getStats);
+
+// User & Profile Management
+router.get('/users', listUsers);
+router.post('/users', createUser);
+router.put('/users/:id', updateUser);
+router.delete('/users/:id', deleteUser);
+
+// Bookings Management
+router.get('/bookings', listAllBookings);
+router.put('/bookings/:id/status', updateBookingStatus);
+
+// Payments Management
+router.get('/payments', listAllPayments);
 router.get('/payments/pending', getPendingPayments);
-
-/**
- * @route PUT /api/admin/payments/:id/verify
- * @desc Verify a payment claim
- */
 router.put('/payments/:id/verify', verifyPayment);
-
-/**
- * @route PUT /api/admin/payments/:id/reject
- * @desc Reject a payment claim
- */
 router.put('/payments/:id/reject', rejectPayment);
 
-/**
- * @route GET /api/admin/config
- * @desc Get all app_config entries
- */
+// Conversations & Chat Monitoring
+router.get('/conversations', listAllConversations);
+router.get('/conversations/:id/messages', getConversationMessages);
+router.delete('/messages/:id', deleteMessage);
+
+// Reports & Safety
+router.get('/reports', listReports);
+router.put('/reports/:id', updateReport);
+
+// System & Fee Configuration
 router.get('/config', getConfig);
-
-/**
- * @route PUT /api/admin/config
- * @desc Update app_config entries
- */
 router.put('/config', updateConfig);
-
-/**
- * @route GET /api/admin/users
- * @desc List all users with filters
- */
-router.get('/users', listUsers);
-
-/**
- * @route GET /api/admin/stats
- * @desc Get dashboard statistics
- */
-router.get('/stats', getStats);
 
 export default router;

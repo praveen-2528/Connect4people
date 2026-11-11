@@ -1,16 +1,90 @@
-import { Op, fn, col } from 'sequelize';
-import { Payment, AppConfig, User, Booking, CompanionProfile } from '../models/index.js';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import { Op } from 'sequelize';
+import {
+  Payment, AppConfig, User, Booking, CompanionProfile,
+  Conversation, Message, Report
+} from '../models/index.js';
 import { successResponse, errorResponse } from '../utils/responseHelper.js';
 
 /**
- * List pending payment claims (both registration and booking).
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @param {import('express').NextFunction} next
+ * Admin Login endpoint.
+ * Authenticates email + password.
+ * Seeds initial admin user if none exists.
+ */
+export const adminLogin = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return errorResponse(res, 'Email and password are required', 400);
+    }
+
+    const adminEmail = process.env.ADMIN_EMAIL || 'admin@connect4people.com';
+    const adminDefaultPass = process.env.ADMIN_PASSWORD || 'Admin@2026!';
+
+    // Check if an admin exists
+    let admin = await User.findOne({ where: { email: email.toLowerCase().trim() } });
+
+    // Seed default admin if requested email matches and no admin user exists
+    if (!admin && email.toLowerCase().trim() === adminEmail.toLowerCase().trim()) {
+      const hash = await bcrypt.hash(adminDefaultPass, 10);
+      admin = await User.create({
+        name: 'Platform Administrator',
+        email: adminEmail.toLowerCase().trim(),
+        password_hash: hash,
+        role: 'admin',
+        is_verified: true,
+        is_payment_verified: true,
+        is_active: true
+      });
+      console.log(`[Admin] Default admin created: ${adminEmail}`);
+    }
+
+    if (!admin) {
+      return errorResponse(res, 'Invalid admin credentials', 401);
+    }
+
+    if (admin.role !== 'admin') {
+      return errorResponse(res, 'Access denied. Account is not an administrator.', 403);
+    }
+
+    // Compare password
+    const isMatch = admin.password_hash
+      ? await bcrypt.compare(password, admin.password_hash)
+      : password === adminDefaultPass;
+
+    if (!isMatch) {
+      return errorResponse(res, 'Invalid admin credentials', 401);
+    }
+
+    // Generate JWT
+    const token = jwt.sign(
+      { id: admin.id, email: admin.email, role: 'admin' },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    return successResponse(res, 'Admin login successful', {
+      token,
+      user: {
+        id: admin.id,
+        name: admin.name,
+        email: admin.email,
+        role: admin.role
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * List pending payment claims.
  */
 export const getPendingPayments = async (req, res, next) => {
   try {
-    const { type, page = 1, limit = 20 } = req.query;
+    const { type, page = 1, limit = 50 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
     const where = { status: 'claimed' };
@@ -20,7 +94,7 @@ export const getPendingPayments = async (req, res, next) => {
       where,
       include: [
         { model: User, as: 'user', attributes: ['id', 'name', 'email', 'phone', 'avatar_url'] },
-        { model: Booking, as: 'booking', attributes: ['id', 'booking_type', 'start_time', 'end_time'] }
+        { model: Booking, as: 'booking', attributes: ['id', 'booking_type', 'start_time', 'end_time', 'total_amount'] }
       ],
       order: [['claimed_at', 'ASC']],
       limit: parseInt(limit),
@@ -42,10 +116,44 @@ export const getPendingPayments = async (req, res, next) => {
 };
 
 /**
+ * List all payments with optional status filter.
+ */
+export const listAllPayments = async (req, res, next) => {
+  try {
+    const { status, type, page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    const where = {};
+    if (status) where.status = status;
+    if (type) where.payment_type = type;
+
+    const { count, rows: payments } = await Payment.findAndCountAll({
+      where,
+      include: [
+        { model: User, as: 'user', attributes: ['id', 'name', 'email', 'phone', 'avatar_url'] },
+        { model: Booking, as: 'booking', attributes: ['id', 'booking_type', 'total_amount', 'platform_fee', 'companion_amount'] }
+      ],
+      order: [['created_at', 'DESC']],
+      limit: parseInt(limit),
+      offset
+    });
+
+    return successResponse(res, 'All payments retrieved', {
+      payments,
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(count / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Verify a payment claim.
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @param {import('express').NextFunction} next
  */
 export const verifyPayment = async (req, res, next) => {
   try {
@@ -72,6 +180,14 @@ export const verifyPayment = async (req, res, next) => {
       );
     }
 
+    // For booking payments, update associated booking to 'confirmed'
+    if (payment.payment_type === 'booking' && payment.booking_id) {
+      await Booking.update(
+        { status: 'confirmed' },
+        { where: { id: payment.booking_id } }
+      );
+    }
+
     return successResponse(res, 'Payment verified successfully', payment);
   } catch (error) {
     next(error);
@@ -80,9 +196,6 @@ export const verifyPayment = async (req, res, next) => {
 
 /**
  * Reject a payment claim.
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @param {import('express').NextFunction} next
  */
 export const rejectPayment = async (req, res, next) => {
   try {
@@ -92,12 +205,7 @@ export const rejectPayment = async (req, res, next) => {
       return errorResponse(res, 'Payment not found', 404);
     }
 
-    if (payment.status !== 'claimed') {
-      return errorResponse(res, `Payment is already ${payment.status}`, 400);
-    }
-
     await payment.update({ status: 'rejected' });
-
     return successResponse(res, 'Payment rejected', payment);
   } catch (error) {
     next(error);
@@ -106,9 +214,6 @@ export const rejectPayment = async (req, res, next) => {
 
 /**
  * Get all app_config entries.
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @param {import('express').NextFunction} next
  */
 export const getConfig = async (req, res, next) => {
   try {
@@ -123,17 +228,14 @@ export const getConfig = async (req, res, next) => {
 };
 
 /**
- * Update app_config entries (key-value pairs).
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @param {import('express').NextFunction} next
+ * Update app_config entries.
  */
 export const updateConfig = async (req, res, next) => {
   try {
-    const updates = req.body; // expects { key: value, ... }
+    const updates = req.body;
 
     for (const [key, value] of Object.entries(updates)) {
-      await AppConfig.upsert({ key, value, updated_at: new Date() });
+      await AppConfig.upsert({ key, value: String(value), updated_at: new Date() });
     }
 
     const configs = await AppConfig.findAll();
@@ -147,14 +249,11 @@ export const updateConfig = async (req, res, next) => {
 };
 
 /**
- * List all users with optional filters.
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @param {import('express').NextFunction} next
+ * List all users with optional filters and search.
  */
 export const listUsers = async (req, res, next) => {
   try {
-    const { search, role, is_companion, is_active, page = 1, limit = 20 } = req.query;
+    const { search, role, is_companion, is_active, page = 1, limit = 50 } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const where = {};
 
@@ -162,7 +261,8 @@ export const listUsers = async (req, res, next) => {
       where[Op.or] = [
         { name: { [Op.iLike]: `%${search}%` } },
         { email: { [Op.iLike]: `%${search}%` } },
-        { phone: { [Op.iLike]: `%${search}%` } }
+        { phone: { [Op.iLike]: `%${search}%` } },
+        { city: { [Op.iLike]: `%${search}%` } }
       ];
     }
     if (role) where.role = role;
@@ -195,10 +295,322 @@ export const listUsers = async (req, res, next) => {
 };
 
 /**
+ * Create a new user or companion directly by admin.
+ */
+export const createUser = async (req, res, next) => {
+  try {
+    const {
+      name, email, phone, city, gender, bio, role = 'user',
+      is_companion = false, is_verified = false, is_payment_verified = false,
+      hourly_rate, event_rate, tagline
+    } = req.body;
+
+    if (!email) {
+      return errorResponse(res, 'Email is required', 400);
+    }
+
+    const existing = await User.findOne({ where: { email } });
+    if (existing) {
+      return errorResponse(res, 'A user with this email already exists', 409);
+    }
+
+    const user = await User.create({
+      name,
+      email,
+      phone,
+      city,
+      gender,
+      bio,
+      role,
+      is_companion: Boolean(is_companion),
+      is_verified: Boolean(is_verified),
+      is_payment_verified: Boolean(is_payment_verified),
+      is_active: true
+    });
+
+    if (is_companion) {
+      await CompanionProfile.create({
+        user_id: user.id,
+        hourly_rate: hourly_rate || 500,
+        event_rate: event_rate || 2000,
+        tagline: tagline || '',
+        is_listed: true
+      });
+    }
+
+    const fullUser = await User.findByPk(user.id, {
+      include: [{ model: CompanionProfile, as: 'companion_profile' }]
+    });
+
+    return successResponse(res, 'User created successfully', fullUser, 201);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update any user profile and companion details.
+ */
+export const updateUser = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findByPk(id);
+
+    if (!user) {
+      return errorResponse(res, 'User not found', 404);
+    }
+
+    const {
+      name, phone, city, gender, bio, role,
+      is_companion, is_verified, is_payment_verified, is_active,
+      hourly_rate, event_rate, tagline, is_listed
+    } = req.body;
+
+    const updates = {};
+    if (name !== undefined) updates.name = name;
+    if (phone !== undefined) updates.phone = phone;
+    if (city !== undefined) updates.city = city;
+    if (gender !== undefined) updates.gender = gender;
+    if (bio !== undefined) updates.bio = bio;
+    if (role !== undefined) updates.role = role;
+    if (is_companion !== undefined) updates.is_companion = is_companion;
+    if (is_verified !== undefined) updates.is_verified = is_verified;
+    if (is_payment_verified !== undefined) updates.is_payment_verified = is_payment_verified;
+    if (is_active !== undefined) updates.is_active = is_active;
+
+    await user.update(updates);
+
+    if (user.is_companion) {
+      let profile = await CompanionProfile.findOne({ where: { user_id: user.id } });
+      const compUpdates = {};
+      if (hourly_rate !== undefined) compUpdates.hourly_rate = hourly_rate;
+      if (event_rate !== undefined) compUpdates.event_rate = event_rate;
+      if (tagline !== undefined) compUpdates.tagline = tagline;
+      if (is_listed !== undefined) compUpdates.is_listed = is_listed;
+
+      if (profile) {
+        await profile.update(compUpdates);
+      } else {
+        await CompanionProfile.create({
+          user_id: user.id,
+          hourly_rate: hourly_rate || 500,
+          event_rate: event_rate || 2000,
+          tagline: tagline || '',
+          is_listed: is_listed !== undefined ? is_listed : true
+        });
+      }
+    }
+
+    const refreshed = await User.findByPk(user.id, {
+      include: [{ model: CompanionProfile, as: 'companion_profile' }]
+    });
+
+    return successResponse(res, 'User updated successfully', refreshed);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Delete a user profile and all related records.
+ */
+export const deleteUser = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findByPk(id);
+
+    if (!user) {
+      return errorResponse(res, 'User not found', 404);
+    }
+
+    // Cascade delete
+    await CompanionProfile.destroy({ where: { user_id: id } });
+    await user.destroy();
+
+    return successResponse(res, 'User deleted successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * List all bookings across the platform.
+ */
+export const listAllBookings = async (req, res, next) => {
+  try {
+    const { status, page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    const where = {};
+    if (status) where.status = status;
+
+    const { count, rows: bookings } = await Booking.findAndCountAll({
+      where,
+      include: [
+        { model: User, as: 'client', attributes: ['id', 'name', 'email', 'phone', 'avatar_url'] },
+        { model: User, as: 'companion', attributes: ['id', 'name', 'email', 'phone', 'avatar_url'] },
+        { model: Payment, as: 'payment' }
+      ],
+      order: [['created_at', 'DESC']],
+      limit: parseInt(limit),
+      offset
+    });
+
+    return successResponse(res, 'Bookings retrieved', {
+      bookings,
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(count / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update booking status manually by admin.
+ */
+export const updateBookingStatus = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const booking = await Booking.findByPk(id);
+    if (!booking) {
+      return errorResponse(res, 'Booking not found', 404);
+    }
+
+    await booking.update({ status });
+    return successResponse(res, 'Booking updated successfully', booking);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * List all conversations across all users with message count and latest message.
+ */
+export const listAllConversations = async (req, res, next) => {
+  try {
+    const conversations = await Conversation.findAll({
+      include: [
+        { model: User, as: 'user1', attributes: ['id', 'name', 'email', 'avatar_url'] },
+        { model: User, as: 'user2', attributes: ['id', 'name', 'email', 'avatar_url'] },
+        {
+          model: Message,
+          as: 'messages',
+          limit: 1,
+          order: [['created_at', 'DESC']]
+        }
+      ],
+      order: [['last_message_at', 'DESC']]
+    });
+
+    return successResponse(res, 'Conversations retrieved', conversations);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Get all messages in a specific conversation for admin inspection.
+ */
+export const getConversationMessages = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const conversation = await Conversation.findByPk(id, {
+      include: [
+        { model: User, as: 'user1', attributes: ['id', 'name', 'email'] },
+        { model: User, as: 'user2', attributes: ['id', 'name', 'email'] }
+      ]
+    });
+
+    if (!conversation) {
+      return errorResponse(res, 'Conversation not found', 404);
+    }
+
+    const messages = await Message.findAll({
+      where: { conversation_id: id },
+      include: [
+        { model: User, as: 'sender', attributes: ['id', 'name', 'email', 'avatar_url'] }
+      ],
+      order: [['created_at', 'ASC']]
+    });
+
+    return successResponse(res, 'Messages retrieved', { conversation, messages });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Delete a specific message by ID.
+ */
+export const deleteMessage = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const message = await Message.findByPk(id);
+
+    if (!message) {
+      return errorResponse(res, 'Message not found', 404);
+    }
+
+    await message.destroy();
+    return successResponse(res, 'Message deleted successfully');
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * List all user reports.
+ */
+export const listReports = async (req, res, next) => {
+  try {
+    const reports = await Report.findAll({
+      include: [
+        { model: User, as: 'reporter', attributes: ['id', 'name', 'email'] },
+        { model: User, as: 'reported', attributes: ['id', 'name', 'email'] }
+      ],
+      order: [['created_at', 'DESC']]
+    });
+
+    return successResponse(res, 'Reports retrieved', reports);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Update report status / add admin notes.
+ */
+export const updateReport = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { status, notes } = req.body;
+
+    const report = await Report.findByPk(id);
+    if (!report) {
+      return errorResponse(res, 'Report not found', 404);
+    }
+
+    const updates = {};
+    if (status) updates.status = status;
+    if (notes !== undefined) updates.notes = notes;
+
+    await report.update(updates);
+    return successResponse(res, 'Report updated successfully', report);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * Get dashboard statistics.
- * @param {import('express').Request} req
- * @param {import('express').Response} res
- * @param {import('express').NextFunction} next
  */
 export const getStats = async (req, res, next) => {
   try {
@@ -222,13 +634,18 @@ export const getStats = async (req, res, next) => {
       where: { status: 'claimed' }
     });
 
+    const totalConversations = await Conversation.count();
+    const totalReports = await Report.count({ where: { status: 'pending' } });
+
     return successResponse(res, 'Dashboard stats retrieved', {
       totalUsers,
       activeCompanions,
       totalBookings,
       completedBookings,
       totalRevenue,
-      pendingPayments
+      pendingPayments,
+      totalConversations,
+      pendingReports: totalReports
     });
   } catch (error) {
     next(error);

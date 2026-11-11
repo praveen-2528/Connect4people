@@ -55,8 +55,8 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log('[Database] PostgreSQL connected successfully.');
 
-    // Sync database tables (in dev or when explicitly requested)
-    if (process.env.DB_AUTO_SYNC === 'true' || process.env.NODE_ENV === 'development') {
+    // Sync database tables only when explicitly requested (schema is managed via db:sync)
+    if (process.env.DB_AUTO_SYNC === 'true') {
       console.log('[Database] Synchronizing schema...');
       await sequelize.sync({ alter: true });
       console.log('[Database] Schema synchronized.');
