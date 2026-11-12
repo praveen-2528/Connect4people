@@ -16,6 +16,10 @@ export const sendOtp = async (req, res, next) => {
   try {
     const { email } = req.body;
 
+    if (!email) {
+      return errorResponse(res, 'Email address is required', 400);
+    }
+
     // Check if user already exists to determine purpose
     const existingUser = await User.findOne({ where: { email } });
     const purpose = existingUser ? 'login' : 'signup';
@@ -39,24 +43,28 @@ export const sendOtp = async (req, res, next) => {
 
     console.log(`\n========================================`);
     console.log(`🔑 [OTP GENERATED] Email: ${email}`);
-    console.log(`🔑 [OTP CODE]      ${code} (or use 123456 in dev)`);
+    console.log(`🔑 [OTP CODE]      ${code}`);
     console.log(`========================================\n`);
 
-    // Try sending OTP via email (Resend HTTPS or SMTP), fallback gracefully
-    let deliveryStatus = 'console';
-    try {
-      const result = await sendOtpEmail(email, code, purpose);
-      if (result && result.success) {
-        deliveryStatus = result.provider;
-      }
-    } catch (mailErr) {
-      console.warn('[Email] Email dispatch failed, falling back to direct code:', mailErr.message);
+    // Dispatch email (via Gmail SMTP or Resend HTTPS)
+    const emailResult = await sendOtpEmail(email, code, purpose);
+
+    // If real email delivery succeeded
+    if (emailResult && emailResult.success) {
+      return successResponse(res, `Verification code sent to ${email}. Please check your inbox.`, {
+        purpose,
+        delivery: emailResult.provider,
+        emailSent: true
+      }, 200);
     }
 
-    return successResponse(res, 'OTP sent successfully', {
+    // If real email delivery failed (e.g. SMTP blocked by cloud firewall or missing credentials)
+    return successResponse(res, `OTP code generated for ${email}`, {
       purpose,
-      devOtp: code,
-      delivery: deliveryStatus
+      delivery: emailResult ? emailResult.provider : 'console',
+      emailSent: false,
+      emailError: emailResult?.error || 'Email could not be delivered to inbox',
+      devOtp: code // Fallback provided so development/testing is not blocked
     }, 200);
   } catch (error) {
     next(error);

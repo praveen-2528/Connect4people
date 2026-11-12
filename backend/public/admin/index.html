@@ -127,6 +127,9 @@
         <button onclick="switchTab('settings')" id="tabBtn-settings" class="tab-btn px-4 py-3 font-medium border-b-2 border-transparent text-slate-600 hover:text-slate-900 flex items-center space-x-2 whitespace-nowrap">
           <i class="fa-solid fa-sliders"></i><span>Platform Settings</span>
         </button>
+        <button onclick="switchTab('email')" id="tabBtn-email" class="tab-btn px-4 py-3 font-medium border-b-2 border-transparent text-slate-600 hover:text-slate-900 flex items-center space-x-2 whitespace-nowrap">
+          <i class="fa-solid fa-envelope"></i><span>Email & OTP Diagnostics</span>
+        </button>
       </div>
     </header>
 
@@ -450,6 +453,88 @@
         </div>
       </section>
 
+      <!-- ================= TAB: EMAIL & OTP DIAGNOSTICS ================= -->
+      <section id="tab-email" class="hidden space-y-6 max-w-4xl">
+        <div class="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-6">
+          <div class="flex items-center justify-between pb-4 border-b border-slate-100">
+            <div>
+              <h2 class="text-base font-bold text-slate-900">Email Delivery & SMTP Status</h2>
+              <p class="text-xs text-slate-500">Live inspection of environment variables and connection status for OTP emails on Render.</p>
+            </div>
+            <button onclick="loadEmailStatus()" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition">
+              <i class="fa-solid fa-rotate-right mr-1"></i> Refresh Status
+            </button>
+          </div>
+
+          <div id="emailStatusLoading" class="py-8 text-center text-slate-400 text-xs">
+            <i class="fa-solid fa-spinner fa-spin text-lg mb-2"></i>
+            <p>Checking live mail server connection on Render...</p>
+          </div>
+
+          <div id="emailStatusContent" class="hidden space-y-6">
+            <!-- Badges & Overview -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div class="p-4 rounded-xl border border-slate-100 bg-slate-50">
+                <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">SMTP User Account</div>
+                <div id="diagSmtpUser" class="text-sm font-bold text-slate-800">Not detected</div>
+              </div>
+              <div class="p-4 rounded-xl border border-slate-100 bg-slate-50">
+                <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">App Password</div>
+                <div id="diagSmtpPass" class="text-sm font-bold text-slate-800">Not detected</div>
+              </div>
+              <div class="p-4 rounded-xl border border-slate-100 bg-slate-50">
+                <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Live Connection</div>
+                <div id="diagSmtpConn" class="text-sm font-bold text-slate-800">Testing...</div>
+              </div>
+            </div>
+
+            <!-- Detailed Diagnostics Alert -->
+            <div id="diagDetailBox" class="p-4 rounded-xl text-xs space-y-1"></div>
+
+            <!-- Send Test Email -->
+            <div class="pt-4 border-t border-slate-100">
+              <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2">Test Live Email Delivery</h3>
+              <p class="text-xs text-slate-500 mb-3">Send a real verification OTP email right now to verify that your inbox receives it.</p>
+              <form id="testEmailForm" class="flex gap-2 max-w-md">
+                <input type="email" id="testEmailTarget" placeholder="Enter your email to test" required
+                  class="flex-1 px-3 py-2 border border-slate-200 rounded-xl text-xs outline-none focus:border-brand-500">
+                <button type="submit" id="testEmailBtn" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-bold transition whitespace-nowrap">
+                  Send Test OTP
+                </button>
+              </form>
+              <div id="testEmailResult" class="hidden mt-3 p-3 rounded-xl text-xs"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent OTP Codes Table -->
+        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <h3 class="text-xs font-bold text-slate-900 uppercase tracking-wider">Recent OTP Codes Generated</h3>
+            <button onclick="loadRecentOtps()" class="text-xs text-brand-600 hover:underline font-semibold">
+              <i class="fa-solid fa-rotate-right mr-1"></i> Refresh
+            </button>
+          </div>
+          <div class="overflow-x-auto custom-scroll">
+            <table class="w-full text-left text-xs">
+              <thead class="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase font-semibold">
+                <tr>
+                  <th class="px-4 py-3">Email</th>
+                  <th class="px-4 py-3">Code</th>
+                  <th class="px-4 py-3">Purpose</th>
+                  <th class="px-4 py-3">Status</th>
+                  <th class="px-4 py-3">Expires At</th>
+                  <th class="px-4 py-3">Created</th>
+                </tr>
+              </thead>
+              <tbody id="otpsTableBody" class="divide-y divide-slate-100">
+                <tr><td colspan="6" class="px-4 py-6 text-center text-slate-400">Loading recent OTPs...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
     </main>
   </div>
 
@@ -642,6 +727,7 @@
       if (tabId === 'payments') loadPayments('claimed');
       if (tabId === 'reports') loadReports();
       if (tabId === 'settings') loadConfig();
+      if (tabId === 'email') { loadEmailStatus(); loadRecentOtps(); }
     }
 
     // ================= DASHBOARD & STATS =================
@@ -1215,6 +1301,133 @@
         alertBox.className = 'p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl text-xs';
         alertBox.innerText = 'Error saving settings: ' + err.message;
         alertBox.classList.remove('hidden');
+      }
+    });
+
+    // ================= EMAIL & OTP DIAGNOSTICS =================
+    async function loadEmailStatus() {
+      const loading = document.getElementById('emailStatusLoading');
+      const content = document.getElementById('emailStatusContent');
+      loading.classList.remove('hidden');
+      content.classList.add('hidden');
+
+      try {
+        const res = await fetch(`${API_BASE}/email-status`, { headers: getHeaders() });
+        const d = await res.json();
+        loading.classList.add('hidden');
+        content.classList.remove('hidden');
+
+        if (d.success && d.data) {
+          const s = d.data;
+          
+          // User
+          document.getElementById('diagSmtpUser').innerHTML = s.hasSmtpUser
+            ? `<span class="text-emerald-600"><i class="fa-solid fa-check mr-1"></i>${escapeHtml(s.smtpUser)}</span>`
+            : `<span class="text-amber-600"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Missing</span>`;
+
+          // Pass
+          document.getElementById('diagSmtpPass').innerHTML = s.hasSmtpPass
+            ? `<span class="text-emerald-600"><i class="fa-solid fa-check mr-1"></i>Set (${s.passLength} chars)</span>`
+            : `<span class="text-amber-600"><i class="fa-solid fa-triangle-exclamation mr-1"></i>Missing</span>`;
+
+          // Live Connection
+          const connEl = document.getElementById('diagSmtpConn');
+          const detailEl = document.getElementById('diagDetailBox');
+
+          if (s.smtpVerification) {
+            if (s.smtpVerification.success) {
+              connEl.innerHTML = `<span class="text-emerald-600"><i class="fa-solid fa-circle-check mr-1"></i>Connected</span>`;
+              detailEl.className = 'p-4 rounded-xl text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 space-y-1';
+              detailEl.innerHTML = `<strong>✓ SMTP Handshake Succeeded:</strong> Mail server responded successfully! Real OTP emails will be delivered directly to user inboxes.`;
+            } else {
+              connEl.innerHTML = `<span class="text-red-600"><i class="fa-solid fa-circle-xmark mr-1"></i>Blocked/Failed</span>`;
+              detailEl.className = 'p-4 rounded-xl text-xs bg-red-50 border border-red-200 text-red-800 space-y-1';
+              detailEl.innerHTML = `<div><strong>SMTP Connection Error:</strong> ${escapeHtml(s.smtpVerification.error || 'Failed')}</div>
+                <div class="mt-1 text-slate-600"><em>Hint:</em> ${escapeHtml(s.smtpVerification.hint || '')}</div>`;
+            }
+          } else if (s.hasResend) {
+            connEl.innerHTML = `<span class="text-emerald-600"><i class="fa-solid fa-circle-check mr-1"></i>Resend Active</span>`;
+            detailEl.className = 'p-4 rounded-xl text-xs bg-emerald-50 border border-emerald-200 text-emerald-800 space-y-1';
+            detailEl.innerHTML = `<strong>✓ Resend HTTPS API Active:</strong> Emails will be delivered via Resend HTTPS (unblocked on all cloud platforms).`;
+          } else {
+            connEl.innerHTML = `<span class="text-slate-500">Not configured</span>`;
+            detailEl.className = 'p-4 rounded-xl text-xs bg-amber-50 border border-amber-200 text-amber-800 space-y-1';
+            detailEl.innerHTML = `<strong>Notice:</strong> No SMTP or Resend credentials found in environment variables. OTP codes are logged to console and visible in the table below.`;
+          }
+        }
+      } catch (err) {
+        loading.classList.add('hidden');
+        content.classList.remove('hidden');
+        document.getElementById('diagDetailBox').className = 'p-4 rounded-xl text-xs bg-red-50 text-red-800';
+        document.getElementById('diagDetailBox').innerText = 'Failed to load diagnostics: ' + err.message;
+      }
+    }
+
+    async function loadRecentOtps() {
+      const tbody = document.getElementById('otpsTableBody');
+      try {
+        const res = await fetch(`${API_BASE}/otps`, { headers: getHeaders() });
+        const d = await res.json();
+        if (d.success && d.data && d.data.length > 0) {
+          tbody.innerHTML = d.data.map(o => `
+            <tr class="hover:bg-slate-50 transition">
+              <td class="px-4 py-3 font-semibold text-slate-800">${escapeHtml(o.email)}</td>
+              <td class="px-4 py-3 font-mono font-bold text-brand-600 text-sm tracking-wider">${escapeHtml(o.code)}</td>
+              <td class="px-4 py-3 capitalize text-slate-600">${escapeHtml(o.purpose)}</td>
+              <td class="px-4 py-3">
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold ${o.is_used ? 'bg-slate-100 text-slate-600' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'}">
+                  ${o.is_used ? 'Used' : 'Active / Pending'}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-slate-500 text-[11px]">${new Date(o.expires_at).toLocaleTimeString()}</td>
+              <td class="px-4 py-3 text-slate-400 text-[11px]">${new Date(o.created_at).toLocaleTimeString()}</td>
+            </tr>
+          `).join('');
+        } else {
+          tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-slate-400">No OTP codes recorded yet.</td></tr>`;
+        }
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-red-500">Failed to load OTPs: ${escapeHtml(err.message)}</td></tr>`;
+      }
+    }
+
+    // Test Email Form Handler
+    document.getElementById('testEmailForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('testEmailTarget').value.trim();
+      const btn = document.getElementById('testEmailBtn');
+      const resBox = document.getElementById('testEmailResult');
+
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-1"></i> Sending...`;
+      resBox.classList.add('hidden');
+
+      try {
+        const res = await fetch(`${API_BASE}/test-email`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({ email })
+        });
+        const d = await res.json();
+        btn.disabled = false;
+        btn.innerText = 'Send Test OTP';
+        resBox.classList.remove('hidden');
+
+        if (d.success && d.data && d.data.success) {
+          resBox.className = 'mt-3 p-3 rounded-xl text-xs bg-emerald-50 border border-emerald-200 text-emerald-800';
+          resBox.innerHTML = `<strong>✓ Email Delivered!</strong> Sent via ${d.data.provider} to <strong>${escapeHtml(email)}</strong>. Check your inbox!`;
+          loadRecentOtps();
+        } else {
+          const errDetail = d.data?.error || d.message || 'Dispatch failed';
+          resBox.className = 'mt-3 p-3 rounded-xl text-xs bg-red-50 border border-red-200 text-red-800';
+          resBox.innerHTML = `<strong>Dispatch Failed:</strong> ${escapeHtml(errDetail)}`;
+        }
+      } catch (err) {
+        btn.disabled = false;
+        btn.innerText = 'Send Test OTP';
+        resBox.className = 'mt-3 p-3 rounded-xl text-xs bg-red-50 border border-red-200 text-red-800';
+        resBox.innerText = 'Network error: ' + err.message;
+        resBox.classList.remove('hidden');
       }
     });
 

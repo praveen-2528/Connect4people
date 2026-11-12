@@ -1,34 +1,56 @@
 import nodemailer from 'nodemailer';
 
 /**
- * Create and configure the Nodemailer transporter for Gmail SMTP with strict connection timeouts.
- * Render Free Tier blocks outbound ports 25, 465, and 587, so timeouts ensure the app never hangs.
- * @returns {import('nodemailer').Transporter} Configured mail transporter
+ * Extract SMTP credentials from all possible environment variable aliases.
+ * Automatically cleans whitespace from Google App Passwords (e.g. "abcd efgh ijkl mnop" -> "abcdefghijklmnop").
  */
-const createTransporter = () => {
-  const isPort465 = parseInt(process.env.SMTP_PORT, 10) === 465;
-  const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT, 10) || 587,
-    secure: isPort465,
-    connectionTimeout: 4000, // 4s timeout to avoid hanging when cloud firewall blocks SMTP
-    greetingTimeout: 4000,
-    socketTimeout: 5000,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS
-    }
-  });
+export const getSmtpCredentials = () => {
+  const user = process.env.SMTP_USER ||
+               process.env.SMTP_USERNAME ||
+               process.env.EMAIL_USER ||
+               process.env.EMAIL_USERNAME ||
+               process.env.GMAIL_USER ||
+               process.env.GMAIL_USERNAME ||
+               process.env.GMAIL_EMAIL ||
+               process.env.GMAIL ||
+               process.env.EMAIL ||
+               process.env.MAIL_USER ||
+               process.env.USER_EMAIL;
 
-  return transporter;
+  const rawPass = process.env.SMTP_PASS ||
+                  process.env.SMTP_PASSWORD ||
+                  process.env.EMAIL_PASS ||
+                  process.env.EMAIL_PASSWORD ||
+                  process.env.GMAIL_PASS ||
+                  process.env.GMAIL_PASSWORD ||
+                  process.env.GMAIL_APP_PASSWORD ||
+                  process.env.APP_PASSWORD ||
+                  process.env.APP_PASS ||
+                  process.env.MAIL_PASS;
+
+  const pass = rawPass ? rawPass.trim().replace(/\s+/g, '') : null;
+  return { user: user ? user.trim() : null, pass };
+};
+
+/**
+ * Create Nodemailer transporter for Gmail.
+ */
+export const createTransporter = () => {
+  const { user, pass } = getSmtpCredentials();
+  if (!user || !pass) return null;
+
+  return nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user, pass },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 8000
+  });
 };
 
 /**
  * Send email via Resend HTTPS REST API (Port 443).
- * 100% compatible with Render Free Tier, AWS, and serverless environments.
- * @param {string} email
- * @param {string} subject
- * @param {string} html
+ * Always unblocked on Render Free Tier, AWS, and serverless hosts.
  */
 const sendViaResend = async (email, subject, html) => {
   const apiKey = process.env.RESEND_API_KEY;
@@ -58,13 +80,12 @@ const sendViaResend = async (email, subject, html) => {
 
 /**
  * Send an OTP email to the specified address.
- * Automatically attempts Resend HTTPS API first (unblocked on Render Free Tier),
- * then falls back to SMTP with strict timeouts.
+ * Tries Resend HTTPS API (Port 443) first, then Gmail SMTP.
  * 
  * @param {string} email - Recipient email address
  * @param {string} otp - The OTP code to send
  * @param {string} purpose - Purpose of the OTP ('login' | 'signup')
- * @returns {Promise<{ success: boolean, provider: string }>}
+ * @returns {Promise<{ success: boolean, provider: string, error?: string }>}
  */
 export const sendOtpEmail = async (email, otp, purpose) => {
   const subject = purpose === 'signup'
@@ -80,7 +101,7 @@ export const sendOtpEmail = async (email, otp, purpose) => {
     </div>
   `;
 
-  // 1. Try Resend HTTP API (HTTPS port 443 - works on Render Free Tier)
+  // 1. Try Resend HTTP API (HTTPS port 443 - works everywhere)
   if (process.env.RESEND_API_KEY) {
     try {
       await sendViaResend(email, subject, html);
@@ -91,26 +112,27 @@ export const sendOtpEmail = async (email, otp, purpose) => {
     }
   }
 
-  // 2. Try Nodemailer SMTP (e.g. Gmail App Password)
-  if (process.env.SMTP_USER && process.env.SMTP_PASS && process.env.SMTP_PASS !== 'your_gmail_app_password') {
+  // 2. Try Nodemailer Gmail SMTP
+  const { user: smtpUser, pass: smtpPass } = getSmtpCredentials();
+  if (smtpUser && smtpPass && smtpPass !== 'your_gmail_app_password') {
     try {
       const transporter = createTransporter();
       await transporter.sendMail({
-        from: `"Connect4People" <${process.env.SMTP_USER}>`,
+        from: `"Connect4People" <${smtpUser}>`,
         to: email,
         subject,
         html
       });
-      console.log(`[Email] OTP sent to ${email} via SMTP.`);
-      return { success: true, provider: 'smtp' };
+      console.log(`[Email] ✅ Real OTP email sent successfully to ${email} via Gmail SMTP.`);
+      return { success: true, provider: 'gmail_smtp' };
     } catch (smtpErr) {
-      console.warn(`[Email] SMTP failed (${smtpErr.message}). (Note: Render Free Tier blocks outbound SMTP ports 25, 465, 587. Use RESEND_API_KEY or upgrade Render instance).`);
-      throw smtpErr;
+      console.warn(`[Email] Gmail SMTP error (${smtpErr.message}).`);
+      return { success: false, provider: 'gmail_smtp', error: smtpErr.message };
     }
   }
 
-  console.log(`[Email] No active email provider configured (Set RESEND_API_KEY or SMTP_USER/SMTP_PASS).`);
-  return { success: false, provider: 'none' };
+  console.log(`[Email] No active email credentials found in environment variables.`);
+  return { success: false, provider: 'none', error: 'No SMTP credentials configured on server' };
 };
 
-export default { sendOtpEmail };
+export default { sendOtpEmail, getSmtpCredentials, createTransporter };

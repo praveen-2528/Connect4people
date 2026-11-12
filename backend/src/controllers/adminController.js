@@ -5,6 +5,7 @@ import {
   Payment, AppConfig, User, Booking, CompanionProfile,
   Conversation, Message, Report, OtpCode
 } from '../models/index.js';
+import { getSmtpCredentials, createTransporter, sendOtpEmail } from '../config/email.js';
 import { successResponse, errorResponse } from '../utils/responseHelper.js';
 
 /**
@@ -664,6 +665,75 @@ export const listRecentOtps = async (req, res, next) => {
       limit: 25
     });
     return successResponse(res, 'Recent OTP codes retrieved', otps);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Diagnostic endpoint to check live email environment variables and SMTP connection.
+ */
+export const getEmailStatus = async (req, res, next) => {
+  try {
+    const { user, pass } = getSmtpCredentials();
+    const hasResend = Boolean(process.env.RESEND_API_KEY);
+    const hasSmtpUser = Boolean(user);
+    const hasSmtpPass = Boolean(pass);
+
+    const detectedKeys = [];
+    [
+      'SMTP_USER', 'SMTP_USERNAME', 'EMAIL_USER', 'EMAIL_USERNAME', 'GMAIL_USER', 'GMAIL', 'EMAIL',
+      'SMTP_PASS', 'SMTP_PASSWORD', 'EMAIL_PASS', 'EMAIL_PASSWORD', 'GMAIL_PASS', 'GMAIL_APP_PASSWORD',
+      'APP_PASSWORD', 'APP_PASS', 'RESEND_API_KEY'
+    ].forEach(k => {
+      if (process.env[k]) detectedKeys.push(k);
+    });
+
+    let smtpVerification = null;
+    if (hasSmtpUser && hasSmtpPass) {
+      try {
+        const transporter = createTransporter();
+        await transporter.verify();
+        smtpVerification = { success: true, message: 'SMTP connection verified successfully' };
+      } catch (err) {
+        smtpVerification = {
+          success: false,
+          error: err.message,
+          code: err.code,
+          hint: err.code === 'ETIMEDOUT'
+            ? 'Render Free Tier blocks outbound SMTP traffic on ports 25, 465, and 587. To send real emails from Render, add RESEND_API_KEY or upgrade the Render instance.'
+            : (err.message.includes('Username and Password not accepted')
+              ? 'Gmail App Password invalid or 2FA not enabled on this Google account.'
+              : err.message)
+        };
+      }
+    }
+
+    return successResponse(res, 'Email status diagnostics retrieved', {
+      hasResend,
+      hasSmtpUser,
+      smtpUser: user ? `${user.substring(0, 3)}***@${user.split('@')[1] || ''}` : null,
+      hasSmtpPass,
+      passLength: pass ? pass.length : 0,
+      detectedKeys,
+      smtpVerification
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Test endpoint to dispatch a test email to any address.
+ */
+export const testSendEmail = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return errorResponse(res, 'Target email is required', 400);
+    }
+    const result = await sendOtpEmail(email, '998877', 'signup');
+    return successResponse(res, 'Email dispatch result', result);
   } catch (error) {
     next(error);
   }

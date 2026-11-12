@@ -19,7 +19,9 @@ import {
   listReports,
   updateReport,
   getStats,
-  listRecentOtps
+  listRecentOtps,
+  getEmailStatus,
+  testSendEmail
 } from '../controllers/adminController.js';
 import { authenticate, isAdmin } from '../middleware/auth.js';
 
@@ -65,5 +67,9 @@ router.put('/config', updateConfig);
 
 // Recent OTP Codes Monitor
 router.get('/otps', listRecentOtps);
+
+// Email Delivery & SMTP Diagnostics
+router.get('/email-status', getEmailStatus);
+router.post('/test-email', testSendEmail);
 
 export default router;
