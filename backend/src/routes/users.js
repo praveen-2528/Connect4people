@@ -39,9 +39,18 @@ router.put(
 
 /**
  * @route POST /api/users/me/photos
- * @desc Upload a photo to S3
+ * @desc Upload a photo or add photo URL
  */
-router.post('/me/photos', upload.single('photo'), uploadPhoto);
+router.post(
+  '/me/photos',
+  (req, res, next) => {
+    if (req.is('multipart/form-data')) {
+      return upload.single('photo')(req, res, next);
+    }
+    next();
+  },
+  uploadPhoto
+);
 
 /**
  * @route DELETE /api/users/me/photos/:id

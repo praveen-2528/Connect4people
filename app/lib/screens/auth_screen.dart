@@ -15,15 +15,92 @@ class AuthScreen extends ConsumerStatefulWidget {
 
 class _AuthScreenState extends ConsumerState<AuthScreen> {
   final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _nameController = TextEditingController();
   final _otpController = TextEditingController();
+
+  bool _isPasswordMode = true; // Default to fast Password authentication
+  bool _isSignUp = false;      // Toggle between Sign In vs Create Account
+  bool _obscurePassword = true;
   bool _otpSent = false;
   bool _isLoading = false;
 
   @override
   void dispose() {
     _emailController.dispose();
+    _passwordController.dispose();
+    _nameController.dispose();
     _otpController.dispose();
     super.dispose();
+  }
+
+  void _navigateToNextScreen() {
+    if (!mounted) return;
+    final authState = ref.read(authProvider);
+
+    if (authState.isNewUser || authState.user?.name == null || authState.user!.name!.isEmpty) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+      );
+    } else if (!authState.user!.isPaymentVerified && authState.user?.role != 'admin') {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const RegistrationPaymentScreen()),
+      );
+    } else {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => const MainShellScreen()),
+      );
+    }
+  }
+
+  Future<void> _handlePasswordAuth() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final name = _nameController.text.trim();
+
+    if (email.isEmpty || !email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid email address')),
+      );
+      return;
+    }
+
+    if (password.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password must be at least 6 characters')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    bool success;
+    if (_isSignUp) {
+      success = await ref.read(authProvider.notifier).registerWithPassword(
+        email,
+        password,
+        name: name.isNotEmpty ? name : null,
+      );
+    } else {
+      success = await ref.read(authProvider.notifier).loginWithPassword(email, password);
+    }
+
+    setState(() => _isLoading = false);
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_isSignUp ? 'Account created successfully!' : 'Welcome back!'),
+          backgroundColor: AppColors.success,
+        ),
+      );
+      _navigateToNextScreen();
+    } else {
+      final err = ref.read(authProvider).errorMessage ?? 'Authentication failed';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(err), backgroundColor: AppColors.error),
+      );
+    }
   }
 
   Future<void> _handleSendOtp() async {
@@ -77,23 +154,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     final success = await ref.read(authProvider.notifier).verifyOtp(email, code);
     setState(() => _isLoading = false);
 
-    if (success && mounted) {
-      final authState = ref.read(authProvider);
-
-      if (authState.isNewUser || authState.user?.name == null || authState.user!.name!.isEmpty) {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
-        );
-      } else if (!authState.user!.isPaymentVerified && authState.user?.role != 'admin') {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const RegistrationPaymentScreen()),
-        );
-      } else {
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const MainShellScreen()),
-        );
-      }
-    } else if (mounted) {
+    if (success) {
+      _navigateToNextScreen();
+    } else {
       final err = ref.read(authProvider).errorMessage ?? 'Invalid verification code';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(err), backgroundColor: AppColors.error),
@@ -115,21 +178,30 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Logo icon
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: AppColors.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Icon(Icons.mail_outline_rounded, color: AppColors.primary, size: 36),
+                child: Icon(
+                  _isPasswordMode ? Icons.lock_outline_rounded : Icons.mail_outline_rounded,
+                  color: AppColors.primary,
+                  size: 36,
+                ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
+
+              // Title
               Text(
-                _otpSent ? 'Enter 6-Digit Code' : 'Welcome to Connect4People',
+                _isPasswordMode
+                    ? (_isSignUp ? 'Create an Account' : 'Welcome to Connect4People')
+                    : (_otpSent ? 'Enter 6-Digit Code' : 'Sign in with OTP'),
                 style: const TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.bold,
@@ -137,90 +209,236 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ),
               ),
               const SizedBox(height: 8),
+
+              // Subtitle
               Text(
-                _otpSent
-                    ? 'We have sent an authentication OTP to ${_emailController.text}'
-                    : 'Enter your email address to sign in or create an account with email OTP verification.',
-                style: const TextStyle(fontSize: 15, color: AppColors.textSecondary, height: 1.4),
+                _isPasswordMode
+                    ? (_isSignUp
+                        ? 'Sign up with your email and password to find or become a companion.'
+                        : 'Sign in with your email and password.')
+                    : (_otpSent
+                        ? 'We have sent an authentication OTP to ${_emailController.text}'
+                        : 'Enter your email address to receive a secure 6-digit verification code.'),
+                style: const TextStyle(fontSize: 14, color: AppColors.textSecondary, height: 1.4),
               ),
-              const SizedBox(height: 36),
-              if (!_otpSent) ...[
-                const Text(
-                  'Email Address',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary),
+              const SizedBox(height: 24),
+
+              // Mode Tabs (Password vs OTP)
+              if (!_otpSent)
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F3F5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _isPasswordMode = true),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _isPasswordMode ? Colors.white : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: _isPasswordMode
+                                  ? [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]
+                                  : null,
+                            ),
+                            child: Center(
+                              child: Text(
+                                'Password',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                  color: _isPasswordMode ? AppColors.primary : AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _isPasswordMode = false),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: !_isPasswordMode ? Colors.white : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: !_isPasswordMode
+                                  ? [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 4)]
+                                  : null,
+                            ),
+                            child: Center(
+                              child: Text(
+                                'Email OTP',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                  color: !_isPasswordMode ? AppColors.primary : AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 8),
+              const SizedBox(height: 24),
+
+              // ==========================================
+              // PASSWORD MODE
+              // ==========================================
+              if (_isPasswordMode) ...[
+                if (_isSignUp) ...[
+                  const Text('Full Name (Optional)', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(
+                      hintText: 'e.g. Rahul Sharma',
+                      prefixIcon: Icon(Icons.person_outline, color: AppColors.textSecondary),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                const Text('Email Address', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                const SizedBox(height: 6),
                 TextField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   autocorrect: false,
                   decoration: const InputDecoration(
-                    hintText: 'e.g. yourname@gmail.com',
+                    hintText: 'name@example.com',
                     prefixIcon: Icon(Icons.email_outlined, color: AppColors.textSecondary),
                   ),
                 ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _handleSendOtp,
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                        )
-                      : const Text('Send Verification Code'),
-                ),
-              ] else ...[
-                const Text(
-                  '6-Digit OTP',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: AppColors.textPrimary),
-                ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 16),
+
+                const Text('Password', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                const SizedBox(height: 6),
                 TextField(
-                  controller: _otpController,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 8),
-                  decoration: const InputDecoration(
-                    counterText: '',
-                    hintText: '000000',
+                  controller: _passwordController,
+                  obscureText: _obscurePassword,
+                  decoration: InputDecoration(
+                    hintText: '••••••••',
+                    prefixIcon: const Icon(Icons.lock_outline, color: AppColors.textSecondary),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                        color: AppColors.textSecondary,
+                      ),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),
+
                 ElevatedButton(
-                  onPressed: _isLoading ? null : _handleVerifyOtp,
+                  onPressed: _isLoading ? null : _handlePasswordAuth,
                   child: _isLoading
                       ? const SizedBox(
-                          width: 24,
-                          height: 24,
+                          width: 22,
+                          height: 22,
                           child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                         )
-                      : const Text('Verify & Continue'),
+                      : Text(_isSignUp ? 'Create Account' : 'Sign In'),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 14),
+
                 Center(
                   child: TextButton(
-                    onPressed: _isLoading ? null : _handleSendOtp,
-                    child: const Text('Didn\'t receive code? Resend OTP', style: TextStyle(color: AppColors.primary)),
+                    onPressed: () => setState(() => _isSignUp = !_isSignUp),
+                    child: Text(
+                      _isSignUp
+                          ? 'Already have an account? Sign In'
+                          : 'Don\'t have an account? Create Account',
+                      style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
+              ]
+
+              // ==========================================
+              // OTP MODE
+              // ==========================================
+              else ...[
+                if (!_otpSent) ...[
+                  const Text('Email Address', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    autocorrect: false,
+                    decoration: const InputDecoration(
+                      hintText: 'name@example.com',
+                      prefixIcon: Icon(Icons.email_outlined, color: AppColors.textSecondary),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _handleSendOtp,
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text('Send Verification Code'),
+                  ),
+                ] else ...[
+                  const Text('6-Digit OTP', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  TextField(
+                    controller: _otpController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 8),
+                    decoration: const InputDecoration(
+                      counterText: '',
+                      hintText: '000000',
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _handleVerifyOtp,
+                    child: _isLoading
+                        ? const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          )
+                        : const Text('Verify & Continue'),
+                  ),
+                  const SizedBox(height: 14),
+                  Center(
+                    child: TextButton(
+                      onPressed: _isLoading ? null : _handleSendOtp,
+                      child: const Text('Didn\'t receive code? Resend OTP', style: TextStyle(color: AppColors.primary)),
+                    ),
+                  ),
+                ],
               ],
-              const SizedBox(height: 40),
+
+              const SizedBox(height: 32),
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF5F5F7),
-                  borderRadius: BorderRadius.circular(14),
+                  color: const Color(0xFFF7F7F9),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: const [
-                    Icon(Icons.shield_outlined, color: AppColors.textSecondary, size: 24),
-                    SizedBox(width: 12),
+                    Icon(Icons.shield_outlined, color: AppColors.textSecondary, size: 22),
+                    SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'By continuing, you agree that you are 18+ and adhere to community guidelines.',
-                        style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.3),
+                        'By continuing, you agree that you are 18+ and adhere to Connect4People community guidelines.',
+                        style: TextStyle(fontSize: 11, color: AppColors.textSecondary, height: 1.3),
                       ),
                     ),
                   ],

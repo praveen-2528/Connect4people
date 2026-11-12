@@ -106,10 +106,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return true;
   }
 
+  Future<bool> loginWithPassword(String email, String password) async {
+    state = state.copyWith(status: AuthStatus.loading, errorMessage: null);
+    final response = await _api.loginWithPassword(email, password);
+    return _processAuthResponse(response);
+  }
+
+  Future<bool> registerWithPassword(String email, String password, {String? name}) async {
+    state = state.copyWith(status: AuthStatus.loading, errorMessage: null);
+    final response = await _api.registerWithPassword(email, password, name: name);
+    return _processAuthResponse(response);
+  }
+
   Future<bool> verifyOtp(String email, String code) async {
     state = state.copyWith(status: AuthStatus.loading, errorMessage: null);
     final response = await _api.verifyOtp(email, code);
+    return _processAuthResponse(response);
+  }
 
+  Future<bool> _processAuthResponse(ApiResponse<dynamic> response) async {
     if (response.success && response.data != null) {
       final token = response.data['token'];
       final userData = response.data['user'];

@@ -1,3 +1,4 @@
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { Op } from 'sequelize';
 import { User, OtpCode, CompanionProfile } from '../models/index.js';
@@ -166,6 +167,128 @@ export const refreshToken = async (req, res, next) => {
     );
 
     return successResponse(res, 'Token refreshed successfully', { token, user });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Register a user with Email and Password.
+ */
+export const registerWithPassword = async (req, res, next) => {
+  try {
+    const { email, password, name } = req.body;
+
+    if (!email || !password) {
+      return errorResponse(res, 'Email and password are required', 400);
+    }
+    if (password.length < 6) {
+      return errorResponse(res, 'Password must be at least 6 characters', 400);
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const existing = await User.findOne({ where: { email: normalizedEmail } });
+    if (existing) {
+      return errorResponse(res, 'An account already exists with this email. Please sign in.', 409);
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(password, salt);
+
+    const user = await User.create({
+      email: normalizedEmail,
+      name: name?.trim() || null,
+      password_hash
+    });
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
+    );
+
+    const userData = await User.findByPk(user.id, {
+      attributes: { exclude: ['password_hash'] },
+      include: [{ model: CompanionProfile, as: 'companion_profile' }]
+    });
+
+    return successResponse(res, 'Registration successful', {
+      token,
+      user: userData,
+      isNewUser: true
+    }, 201);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Login a user with Email and Password.
+ */
+export const loginWithPassword = async (req, res, next) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return errorResponse(res, 'Email and password are required', 400);
+    }
+
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await User.findOne({ where: { email: normalizedEmail } });
+    if (!user) {
+      return errorResponse(res, 'Invalid email or password', 401);
+    }
+
+    if (!user.is_active) {
+      return errorResponse(res, 'Account is deactivated. Please contact support.', 403);
+    }
+
+    if (!user.password_hash) {
+      return errorResponse(res, 'No password set for this account. Please sign in using Email OTP or reset your password.', 400);
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      return errorResponse(res, 'Invalid email or password', 401);
+    }
+
+    const token = jwt.sign(
+      { id: user.id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '30d' }
+    );
+
+    const userData = await User.findByPk(user.id, {
+      attributes: { exclude: ['password_hash'] },
+      include: [{ model: CompanionProfile, as: 'companion_profile' }]
+    });
+
+    return successResponse(res, 'Login successful', {
+      token,
+      user: userData,
+      isNewUser: false
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Set or update password for authenticated user.
+ */
+export const setPassword = async (req, res, next) => {
+  try {
+    const { password } = req.body;
+    if (!password || password.length < 6) {
+      return errorResponse(res, 'Password must be at least 6 characters', 400);
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(password, salt);
+
+    await User.update({ password_hash }, { where: { id: req.user.id } });
+
+    return successResponse(res, 'Password updated successfully');
   } catch (error) {
     next(error);
   }

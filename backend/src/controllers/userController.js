@@ -69,11 +69,15 @@ export const updateMe = async (req, res, next) => {
  */
 export const uploadPhoto = async (req, res, next) => {
   try {
-    if (!req.file) {
-      return errorResponse(res, 'No file uploaded', 400);
+    let url = req.body?.url;
+
+    if (req.file) {
+      url = await uploadToS3(req.file.buffer, req.file.originalname, 'photos');
     }
 
-    const url = await uploadToS3(req.file.buffer, req.file.originalname, 'photos');
+    if (!url) {
+      return errorResponse(res, 'No photo file or photo URL provided', 400);
+    }
 
     // Count existing photos to set sort order
     const photoCount = await Photo.count({ where: { user_id: req.user.id } });
@@ -91,7 +95,7 @@ export const uploadPhoto = async (req, res, next) => {
       await User.update({ avatar_url: url }, { where: { id: req.user.id } });
     }
 
-    return successResponse(res, 'Photo uploaded successfully', photo, 201);
+    return successResponse(res, 'Photo added successfully', photo, 201);
   } catch (error) {
     next(error);
   }

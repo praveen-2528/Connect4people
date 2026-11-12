@@ -1,10 +1,59 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
-import { sendOtp, verifyOtp, refreshToken } from '../controllers/authController.js';
+import {
+  sendOtp,
+  verifyOtp,
+  refreshToken,
+  registerWithPassword,
+  loginWithPassword,
+  setPassword
+} from '../controllers/authController.js';
 import { validate } from '../middleware/validate.js';
 import { authenticate } from '../middleware/auth.js';
 
 const router = Router();
+
+/**
+ * @route POST /api/auth/register
+ * @desc Register with email and password
+ */
+router.post(
+  '/register',
+  [
+    body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
+  ],
+  validate,
+  registerWithPassword
+);
+
+/**
+ * @route POST /api/auth/login
+ * @desc Sign in with email and password
+ */
+router.post(
+  '/login',
+  [
+    body('email').isEmail().normalizeEmail().withMessage('Valid email is required'),
+    body('password').notEmpty().withMessage('Password is required')
+  ],
+  validate,
+  loginWithPassword
+);
+
+/**
+ * @route POST /api/auth/set-password
+ * @desc Set password for authenticated user
+ */
+router.post(
+  '/set-password',
+  authenticate,
+  [
+    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
+  ],
+  validate,
+  setPassword
+);
 
 /**
  * @route POST /api/auth/send-otp
