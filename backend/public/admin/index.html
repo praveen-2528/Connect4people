@@ -672,7 +672,7 @@
               <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100">
                 <div>
                   <div class="text-xs font-bold text-slate-800">${p.user?.name || p.user?.email || 'User'}</div>
-                  <div class="text-[11px] text-slate-500">₹${p.amount} • ${p.payment_type} • Ref: ${p.upi_ref_id || 'None'}</div>
+                  <div class="text-[11px] text-slate-500">₹${p.amount} • ${p.payment_type} • Ref: ${p.reference_note || p.upi_ref_id || 'None'}</div>
                 </div>
                 <div class="flex space-x-1.5">
                   <button onclick="verifyPayment('${p.id}')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold">Verify</button>
@@ -976,9 +976,9 @@
               <td class="px-4 py-3 font-semibold text-slate-800">${b.client?.name || b.client?.email || 'Client'}</td>
               <td class="px-4 py-3 font-semibold text-brand-700">${b.companion?.name || b.companion?.email || 'Companion'}</td>
               <td class="px-4 py-3 uppercase text-[10px] font-bold text-slate-500">${b.booking_type || 'hourly'}</td>
-              <td class="px-4 py-3 font-bold text-slate-900">₹${b.total_amount || 0}</td>
+              <td class="px-4 py-3 font-bold text-slate-900">₹${b.amount || b.total_amount || 0}</td>
               <td class="px-4 py-3 font-bold text-emerald-600">₹${b.platform_fee || 0} (20%)</td>
-              <td class="px-4 py-3 font-semibold text-slate-600">₹${b.companion_amount || 0} (80%)</td>
+              <td class="px-4 py-3 font-semibold text-slate-600">₹${b.companion_payout || b.companion_amount || 0} (80%)</td>
               <td class="px-4 py-3">
                 <span class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
                   b.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
@@ -1050,7 +1050,7 @@
               <td class="px-4 py-3 uppercase text-[10px] font-bold text-slate-500">${p.payment_type}</td>
               <td class="px-4 py-3 font-bold text-slate-900">₹${p.amount}</td>
               <td class="px-4 py-3 text-slate-700">
-                <div>Ref: <code class="font-bold text-brand-700">${p.upi_ref_id || 'None'}</code></div>
+                <div>Ref: <code class="font-bold text-brand-700">${p.reference_note || p.upi_ref_id || 'None'}</code></div>
                 ${p.payment_proof_url ? `<a href="${p.payment_proof_url}" target="_blank" class="text-blue-600 underline text-[11px]">View Receipt Screenshot</a>` : ''}
               </td>
               <td class="px-4 py-3 text-slate-500 text-[11px]">${new Date(p.claimed_at || p.created_at).toLocaleString()}</td>

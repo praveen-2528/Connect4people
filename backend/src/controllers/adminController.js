@@ -94,7 +94,7 @@ export const getPendingPayments = async (req, res, next) => {
       where,
       include: [
         { model: User, as: 'user', attributes: ['id', 'name', 'email', 'phone', 'avatar_url'] },
-        { model: Booking, as: 'booking', attributes: ['id', 'booking_type', 'start_time', 'end_time', 'total_amount'] }
+        { model: Booking, as: 'booking', attributes: ['id', 'booking_type', 'start_time', 'end_time', 'amount', 'platform_fee', 'companion_payout'] }
       ],
       order: [['claimed_at', 'ASC']],
       limit: parseInt(limit),
@@ -131,7 +131,7 @@ export const listAllPayments = async (req, res, next) => {
       where,
       include: [
         { model: User, as: 'user', attributes: ['id', 'name', 'email', 'phone', 'avatar_url'] },
-        { model: Booking, as: 'booking', attributes: ['id', 'booking_type', 'total_amount', 'platform_fee', 'companion_amount'] }
+        { model: Booking, as: 'booking', attributes: ['id', 'booking_type', 'amount', 'platform_fee', 'companion_payout'] }
       ],
       order: [['created_at', 'DESC']],
       limit: parseInt(limit),
@@ -451,7 +451,7 @@ export const listAllBookings = async (req, res, next) => {
       include: [
         { model: User, as: 'client', attributes: ['id', 'name', 'email', 'phone', 'avatar_url'] },
         { model: User, as: 'companion', attributes: ['id', 'name', 'email', 'phone', 'avatar_url'] },
-        { model: Payment, as: 'payment' }
+        { model: Payment, as: 'payments' }
       ],
       order: [['created_at', 'DESC']],
       limit: parseInt(limit),
