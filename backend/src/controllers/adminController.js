@@ -302,7 +302,7 @@ export const createUser = async (req, res, next) => {
     const {
       name, email, phone, city, gender, bio, role = 'user',
       is_companion = false, is_verified = false, is_payment_verified = false,
-      hourly_rate, event_rate, tagline
+      hourly_rate, event_rate, tagline, avatar_url
     } = req.body;
 
     if (!email) {
@@ -322,6 +322,7 @@ export const createUser = async (req, res, next) => {
       gender,
       bio,
       role,
+      avatar_url: avatar_url || null,
       is_companion: Boolean(is_companion),
       is_verified: Boolean(is_verified),
       is_payment_verified: Boolean(is_payment_verified),
@@ -363,7 +364,7 @@ export const updateUser = async (req, res, next) => {
     const {
       name, phone, city, gender, bio, role,
       is_companion, is_verified, is_payment_verified, is_active,
-      hourly_rate, event_rate, tagline, is_listed
+      hourly_rate, event_rate, tagline, is_listed, avatar_url
     } = req.body;
 
     const updates = {};
@@ -373,6 +374,7 @@ export const updateUser = async (req, res, next) => {
     if (gender !== undefined) updates.gender = gender;
     if (bio !== undefined) updates.bio = bio;
     if (role !== undefined) updates.role = role;
+    if (avatar_url !== undefined) updates.avatar_url = avatar_url;
     if (is_companion !== undefined) updates.is_companion = is_companion;
     if (is_verified !== undefined) updates.is_verified = is_verified;
     if (is_payment_verified !== undefined) updates.is_payment_verified = is_payment_verified;
