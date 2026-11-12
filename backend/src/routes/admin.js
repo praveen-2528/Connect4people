@@ -18,7 +18,8 @@ import {
   deleteMessage,
   listReports,
   updateReport,
-  getStats
+  getStats,
+  listRecentOtps
 } from '../controllers/adminController.js';
 import { authenticate, isAdmin } from '../middleware/auth.js';
 
@@ -61,5 +62,8 @@ router.put('/reports/:id', updateReport);
 // System & Fee Configuration
 router.get('/config', getConfig);
 router.put('/config', updateConfig);
+
+// Recent OTP Codes Monitor
+router.get('/otps', listRecentOtps);
 
 export default router;

@@ -12,6 +12,7 @@ class AuthState {
   final String? token;
   final String? errorMessage;
   final bool isNewUser;
+  final String? devOtp;
 
   AuthState({
     required this.status,
@@ -19,6 +20,7 @@ class AuthState {
     this.token,
     this.errorMessage,
     this.isNewUser = false,
+    this.devOtp,
   });
 
   factory AuthState.initial() => AuthState(status: AuthStatus.initial);
@@ -29,6 +31,7 @@ class AuthState {
     String? token,
     String? errorMessage,
     bool? isNewUser,
+    String? devOtp,
   }) {
     return AuthState(
       status: status ?? this.status,
@@ -36,6 +39,7 @@ class AuthState {
       token: token ?? this.token,
       errorMessage: errorMessage,
       isNewUser: isNewUser ?? this.isNewUser,
+      devOtp: devOtp ?? this.devOtp,
     );
   }
 }
@@ -97,7 +101,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       );
       return false;
     }
-    state = state.copyWith(status: AuthStatus.unauthenticated);
+    final code = response.data is Map ? response.data['devOtp']?.toString() : null;
+    state = state.copyWith(status: AuthStatus.unauthenticated, devOtp: code);
     return true;
   }
 

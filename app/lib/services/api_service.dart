@@ -111,7 +111,7 @@ class ApiService {
     return ApiResponse(
       success: true,
       message: 'OTP sent! Use 123456 or check console in dev mode.',
-      data: {'purpose': 'login'},
+      data: {'purpose': 'login', 'devOtp': '123456'},
     );
   }
 

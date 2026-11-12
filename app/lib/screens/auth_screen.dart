@@ -41,10 +41,17 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
     if (success) {
       setState(() => _otpSent = true);
+      final devOtp = ref.read(authProvider).devOtp;
+      if (devOtp != null && devOtp.isNotEmpty) {
+        _otpController.text = devOtp;
+      }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Verification code sent to $email'),
+          content: Text(devOtp != null
+              ? 'Verification code: $devOtp (Code auto-filled for instant testing)'
+              : 'Verification code sent to $email'),
           backgroundColor: AppColors.success,
+          duration: const Duration(seconds: 4),
         ),
       );
     } else {

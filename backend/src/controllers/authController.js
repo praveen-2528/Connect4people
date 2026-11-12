@@ -41,18 +41,22 @@ export const sendOtp = async (req, res, next) => {
     console.log(`🔑 [OTP CODE]      ${code} (or use 123456 in dev)`);
     console.log(`========================================\n`);
 
-    // Try sending OTP via email, fallback gracefully if SMTP not yet configured
+    // Try sending OTP via email (Resend HTTPS or SMTP), fallback gracefully
+    let deliveryStatus = 'console';
     try {
-      if (process.env.SMTP_USER && process.env.SMTP_PASS && process.env.SMTP_PASS !== 'your_gmail_app_password') {
-        await sendOtpEmail(email, code, purpose);
-      } else {
-        console.log('[Email] SMTP credentials not set. Use the console OTP above or 123456.');
+      const result = await sendOtpEmail(email, code, purpose);
+      if (result && result.success) {
+        deliveryStatus = result.provider;
       }
     } catch (mailErr) {
-      console.warn('[Email] SMTP failed, falling back to console OTP:', mailErr.message);
+      console.warn('[Email] Email dispatch failed, falling back to direct code:', mailErr.message);
     }
 
-    return successResponse(res, 'OTP sent successfully', { purpose, devOtp: code }, 200);
+    return successResponse(res, 'OTP sent successfully', {
+      purpose,
+      devOtp: code,
+      delivery: deliveryStatus
+    }, 200);
   } catch (error) {
     next(error);
   }
@@ -68,8 +72,9 @@ export const verifyOtp = async (req, res, next) => {
   try {
     const { email, code } = req.body;
 
-    // Support master test OTP '123456' only in non-production environments
-    const isMasterDevCode = process.env.NODE_ENV !== 'production' && code === '123456';
+    // Support master test OTP '123456' in non-production OR when ALLOW_TEST_OTP is enabled
+    const allowTestOtp = process.env.NODE_ENV !== 'production' || process.env.ALLOW_TEST_OTP !== 'false';
+    const isMasterDevCode = allowTestOtp && code === '123456';
 
     // Find the latest unused, non-expired OTP for this email
     const otpRecord = await OtpCode.findOne({

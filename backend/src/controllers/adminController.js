@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { Op } from 'sequelize';
 import {
   Payment, AppConfig, User, Booking, CompanionProfile,
-  Conversation, Message, Report
+  Conversation, Message, Report, OtpCode
 } from '../models/index.js';
 import { successResponse, errorResponse } from '../utils/responseHelper.js';
 
@@ -647,6 +647,21 @@ export const getStats = async (req, res, next) => {
       totalConversations,
       pendingReports: totalReports
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * List recent OTP verification codes for platform inspection.
+ */
+export const listRecentOtps = async (req, res, next) => {
+  try {
+    const otps = await OtpCode.findAll({
+      order: [['created_at', 'DESC']],
+      limit: 25
+    });
+    return successResponse(res, 'Recent OTP codes retrieved', otps);
   } catch (error) {
     next(error);
   }
