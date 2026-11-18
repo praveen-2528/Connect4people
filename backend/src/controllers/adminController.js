@@ -701,7 +701,7 @@ export const getEmailStatus = async (req, res, next) => {
           error: err.message,
           code: err.code,
           hint: err.code === 'ETIMEDOUT'
-            ? 'Render Free Tier blocks outbound SMTP traffic on ports 25, 465, and 587. To send real emails from Render, add RESEND_API_KEY or upgrade the Render instance.'
+            ? 'Outbound SMTP connection timed out. Cloud platforms like Render block SMTP ports 25, 465, and 587. On AWS EC2, ensure your outbound traffic permits ports 465/587 (AWS restricts port 25 by default), or configure AWS SES / Resend HTTPS API.'
             : (err.message.includes('Username and Password not accepted')
               ? 'Gmail App Password invalid or 2FA not enabled on this Google account.'
               : err.message)

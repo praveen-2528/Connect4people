@@ -33,18 +33,35 @@ export const getSmtpCredentials = () => {
 };
 
 /**
- * Create Nodemailer transporter for Gmail.
+ * Create Nodemailer transporter.
+ * Supports custom SMTP hosts (AWS SES, Gmail, etc.) or default Gmail service.
  */
 export const createTransporter = () => {
   const { user, pass } = getSmtpCredentials();
   if (!user || !pass) return null;
 
+  const host = process.env.SMTP_HOST;
+  const port = parseInt(process.env.SMTP_PORT, 10);
+
+  if (host) {
+    const isPort465 = port === 465;
+    return nodemailer.createTransport({
+      host,
+      port: port || 587,
+      secure: isPort465,
+      auth: { user, pass },
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000
+    });
+  }
+
   return nodemailer.createTransport({
     service: 'gmail',
     auth: { user, pass },
-    connectionTimeout: 8000,
-    greetingTimeout: 8000,
-    socketTimeout: 8000
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000
   });
 };
 

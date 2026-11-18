@@ -1,7 +1,8 @@
 version: '3.8'
 
 services:
-  # PostgreSQL Database
+  # Optional Local PostgreSQL Database
+  # (Can be used if not connecting to an external Neon Postgres / AWS RDS database)
   postgres:
     image: postgres:16-alpine
     container_name: c4p_postgres
@@ -35,24 +36,31 @@ services:
     environment:
       NODE_ENV: production
       PORT: 5000
-      DB_HOST: postgres
-      DB_PORT: 5432
+      DATABASE_URL: ${DATABASE_URL:-}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
       DB_NAME: ${DB_NAME:-connect4people}
       DB_USER: ${DB_USER:-postgres}
       DB_PASSWORD: ${DB_PASSWORD:-c4p_secure_pass_2026}
+      DB_SSL: ${DB_SSL:-true}
       DB_AUTO_SYNC: "true"
       JWT_SECRET: ${JWT_SECRET:-c4p_prod_jwt_super_secret_key_2026}
-      JWT_EXPIRES_IN: 30d
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-30d}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@connect4people.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Admin@2026!}
       SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
       SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER}
-      SMTP_PASS: ${SMTP_PASS}
-      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
-      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       AWS_REGION: ${AWS_REGION:-ap-south-1}
       AWS_S3_BUCKET: ${AWS_S3_BUCKET:-connect4people-bucket}
-      PLATFORM_COMMISSION_PERCENT: 20
-      REGISTRATION_FEE_INR: 299
+      PLATFORM_COMMISSION_PERCENT: ${PLATFORM_COMMISSION_PERCENT:-20}
+      REGISTRATION_FEE_INR: ${REGISTRATION_FEE_INR:-299}
+      UPI_ID: ${UPI_ID:-connect4people@upi}
+      UPI_QR_URL: ${UPI_QR_URL:-}
     ports:
       - "5000:5000"
     networks:
